@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Memory Card Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+
+      /* Animated gradient background */
+      background: linear-gradient(-45deg, #f0f0f0, #dfe9f3, #f0f0f0, #e2f1f8);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      text-align: center;
+      z-index: 2;
+    }
+
+    .status {
+      margin-bottom: 20px;
+      font-size: 1.1rem;
+      z-index: 2;
+    }
+
+    .game-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      gap: 10px;
+      max-width: 400px;
+      width: 100%;
+      z-index: 2;
+    }
+
+    .card {
+      aspect-ratio: 1 / 1;
+      perspective: 1000px;
+      cursor: pointer;
+    }
+
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      transition: transform 0.5s;
+      transform-style: preserve-3d;
+      position: relative;
+    }
+
+    .flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-front,
+    .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      background: white;
+      border: 2px solid #ccc;
+    }
+
+    .card-back {
+      background: #333;
+      color: white;
+      transform: rotateY(180deg);
+    }
+
+    .controls {
+      margin-top: 20px;
+      z-index: 2;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #333;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #555;
+    }
+
+    .win-message {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: green;
+      text-align: center;
+      z-index: 2;
+    }
+
+    /* Gradient background animation */
+    @keyframes gradientBG {
+      0% {
+        background-position: 0% 50%;
+      }
+      50% {
+        background-position: 100% 50%;
+      }
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    /* Big moving dots */
+    .animated-bg {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .animated-bg span {
+      position: absolute;
+      display: block;
+      width: 150px;
+      height: 150px;
+      background: radial-gradient(circle, rgba(255,255,255,0.4), rgba(255,255,255,0.05));
+      border-radius: 50%;
+      filter: blur(20px);
+      opacity: 0.6;
+      animation: floatUp 25s linear infinite;
+    }
+
+    .animated-bg span:nth-child(1) {
+      left: 10%;
+      bottom: -200px;
+      animation-delay: 0s;
+    }
+    .animated-bg span:nth-child(2) {
+      left: 30%;
+      bottom: -250px;
+      animation-delay: 5s;
+    }
+    .animated-bg span:nth-child(3) {
+      left: 55%;
+      bottom: -220px;
+      animation-delay: 10s;
+    }
+    .animated-bg span:nth-child(4) {
+      left: 75%;
+      bottom: -210px;
+      animation-delay: 15s;
+    }
+    .animated-bg span:nth-child(5) {
+      left: 90%;
+      bottom: -260px;
+      animation-delay: 20s;
+    }
+
+    @keyframes floatUp {
+      0% {
+        transform: translateY(0);
+        opacity: 0.4;
+      }
+      50% {
+        opacity: 0.6;
+      }
+      100% {
+        transform: translateY(-120vh);
+        opacity: 0;
+      }
+    }
+
+    @media (max-width: 400px) {
+      .card-front, .card-back {
+        font-size: 1.4rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Big Dot Background -->
+<div class="animated-bg">
+  <span></span><span></span><span></span><span></span><span></span>
+</div>
+
+<h1>Memory Card Game</h1>
+<div class="status">⏱️ Time: <span id="timer">0</span> seconds</div>
+<div class="game-board" id="gameBoard"></div>
+
+<div class="controls">
+  <button onclick="startGame()">Restart Game</button>
+</div>
+
+<div class="win-message" id="winMessage"></div>
+
+<script>
+  const emojis = ['🍎', '🍌', '🍇', '🍓', '🍍', '🍋', '🥝', '🍑'];
+  let cardValues = [];
+  let firstCard = null;
+  let secondCard = null;
+  let lockBoard = false;
+  let matchedCount = 0;
+  let timerInterval;
+  let seconds = 0;
+
+  const winMessage = document.getElementById('winMessage');
+  const timerDisplay = document.getElementById('timer');
+  const board = document.getElementById('gameBoard');
+
+  const flipSound = new AudioContext();
+  const matchSound = new AudioContext();
+
+  function playFlipSound() {
+    const osc = flipSound.createOscillator();
+    osc.frequency.setValueAtTime(700, flipSound.currentTime);
+    osc.connect(flipSound.destination);
+    osc.start();
+    osc.stop(flipSound.currentTime + 0.1);
+  }
+
+  function playMatchSound() {
+    const osc = matchSound.createOscillator();
+    osc.frequency.setValueAtTime(300, matchSound.currentTime);
+    osc.connect(matchSound.destination);
+    osc.start();
+    osc.stop(matchSound.currentTime + 0.2);
+  }
+
+  function startGame() {
+    board.innerHTML = '';
+    winMessage.innerText = '';
+    cardValues = shuffle([...emojis, ...emojis]);
+
+    cardValues.forEach(emoji => {
+      const card = document.createElement('div');
+      card.classList.add('card');
+      card.dataset.value = emoji;
+
+      card.innerHTML = `
+        <div class="card-inner">
+          <div class="card-front">❓</div>
+          <div class="card-back">${emoji}</div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => handleCardClick(card));
+      board.appendChild(card);
+    });
+
+    firstCard = null;
+    secondCard = null;
+    lockBoard = false;
+    matchedCount = 0;
+
+    clearInterval(timerInterval);
+    seconds = 0;
+    timerDisplay.innerText = seconds;
+    timerInterval = setInterval(() => {
+      seconds++;
+      timerDisplay.innerText = seconds;
+    }, 1000);
+  }
+
+  function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  function handleCardClick(card) {
+    if (lockBoard || card.classList.contains('flipped')) return;
+
+    card.classList.add('flipped');
+    playFlipSound();
+
+    if (!firstCard) {
+      firstCard = card;
+    } else {
+      secondCard = card;
+      checkForMatch();
+    }
+  }
+
+  function checkForMatch() {
+    const isMatch = firstCard.dataset.value === secondCard.dataset.value;
+    if (isMatch) {
+      playMatchSound();
+      disableCards();
+    } else {
+      unflipCards();
+    }
+  }
+
+  function disableCards() {
+    firstCard.removeEventListener('click', () => handleCardClick(firstCard));
+    secondCard.removeEventListener('click', () => handleCardClick(secondCard));
+    matchedCount++;
+    if (matchedCount === emojis.length) {
+      clearInterval(timerInterval);
+      winMessage.innerText = `🎉 You won in ${seconds} seconds!`;
+    }
+    resetBoard();
+  }
+
+  function unflipCards() {
+    lockBoard = true;
+    setTimeout(() => {
+      firstCard.classList.remove('flipped');
+      secondCard.classList.remove('flipped');
+      resetBoard();
+    }, 800);
+  }
+
+  function resetBoard() {
+    [firstCard, secondCard] = [null, null];
+    lockBoard = false;
+  }
+
+  startGame();
+</script>
+
+</body>
+</html>
+
